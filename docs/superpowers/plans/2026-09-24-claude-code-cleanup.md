@@ -1635,7 +1635,7 @@ and change `Every one should sit under \`AppData\Roaming\Code\User\`` to `Every 
 
 - [ ] **Step 4: Check for personal paths**
 
-Run: `git grep -n -i -e wildc -e robbyschmidt`
+Run: `git grep -n -i -e "$env:USERNAME"` (PowerShell)
 Expected: no output.
 
 - [ ] **Step 5: Run the full suite one last time**

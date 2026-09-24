@@ -143,7 +143,7 @@ function Get-VSCodeProjectArtifacts {
     # deletes the project believing it was clean. Warn rather than quietly guess.
     #
     # Inspect the NORMALIZED path, for the same reason the guard above does. GetFullPath
-    # expands 8.3 short names when the path exists, so 'C:\Users\ROBBYS~1\My+Co' and its
+    # expands 8.3 short names when the path exists, so 'C:\Users\LONGNA~1\My+Co' and its
     # long form produce one URI but only the long form contains the '+' -- reading $Project
     # raw would stay silent in exactly the case this warning exists for. It also stops
     # 'D:\@scratch\..\Nuxt\foo' warning about an '@' that the resolved URI never contains.
