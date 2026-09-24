@@ -183,3 +183,36 @@ function Get-ClaudeSessionArtifacts {
         }
     }
 }
+
+# ~\.claude\sessions\<pid>.json exists while a session runs and is removed when it exits.
+# The pid check covers a crash that left the file behind. Advisory only: the CLI warns,
+# it never refuses, so a reused pid costs a spurious warning and nothing else.
+function Get-ClaudeRunningSessions {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]$Roots,
+        [Parameter(Mandatory = $true)][string]$ProjectUri
+    )
+
+    if (-not (Test-Path -LiteralPath $Roots.ClaudeSessions)) { return @() }
+
+    Get-ChildItem -LiteralPath $Roots.ClaudeSessions -Filter '*.json' -File | ForEach-Object {
+        $file = $_.FullName
+        try {
+            $j = Get-Content -LiteralPath $file -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            Write-Warning "Skipping unreadable $file"
+            return
+        }
+
+        if (-not $j.cwd -or -not $j.pid) { return }
+        if ((Get-ClaudeTranscriptClass -Owner $j.cwd -ProjectUri $ProjectUri) -ne 'owned') { return }
+        if (-not (Get-Process -Id ([int]$j.pid) -ErrorAction SilentlyContinue)) { return }
+
+        [pscustomobject]@{
+            ProcessId = [int]$j.pid
+            SessionId = [string]$j.sessionId
+            Cwd       = [string]$j.cwd
+        }
+    }
+}

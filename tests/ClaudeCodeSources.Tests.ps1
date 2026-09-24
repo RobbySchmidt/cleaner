@@ -234,3 +234,54 @@ Describe "Get-ClaudeSessionArtifacts" {
         @(Get-ClaudeSessionArtifacts -Roots $roots -SessionIds @('s1')).Count | Should Be 0
     }
 }
+
+Describe "Get-ClaudeRunningSessions" {
+    $uri = ConvertTo-VSCodeUri -Path 'D:\Nuxt\foo'
+
+    It "reports a live session running in the project" {
+        $claude = New-FakeClaudeRoot -Parent $TestDrive
+        Add-FakeClaudeLiveSession -ClaudeRoot $claude -ProcessId $PID -Cwd 'D:\Nuxt\foo\sub' -SessionId 's1' | Out-Null
+        $roots  = Get-VSCodeRoots -CodeRoot (Join-Path $TestDrive 'nocode') -ClaudeRoot $claude
+
+        $result = @(Get-ClaudeRunningSessions -Roots $roots -ProjectUri $uri)
+
+        $result.Count        | Should Be 1
+        $result[0].ProcessId | Should Be $PID
+        $result[0].SessionId | Should Be 's1'
+    }
+
+    It "ignores a live session in another project" {
+        $claude = New-FakeClaudeRoot -Parent $TestDrive
+        Add-FakeClaudeLiveSession -ClaudeRoot $claude -ProcessId $PID -Cwd 'D:\Nuxt\foo-main' | Out-Null
+        $roots  = Get-VSCodeRoots -CodeRoot (Join-Path $TestDrive 'nocode') -ClaudeRoot $claude
+
+        @(Get-ClaudeRunningSessions -Roots $roots -ProjectUri $uri).Count | Should Be 0
+    }
+
+    It "ignores a session whose process has exited" {
+        $p = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', 'exit' -PassThru -WindowStyle Hidden
+        $p.WaitForExit()
+        $claude = New-FakeClaudeRoot -Parent $TestDrive
+        Add-FakeClaudeLiveSession -ClaudeRoot $claude -ProcessId $p.Id -Cwd 'D:\Nuxt\foo' | Out-Null
+        $roots  = Get-VSCodeRoots -CodeRoot (Join-Path $TestDrive 'nocode') -ClaudeRoot $claude
+
+        @(Get-ClaudeRunningSessions -Roots $roots -ProjectUri $uri).Count | Should Be 0
+    }
+
+    It "warns and skips an unreadable session file" {
+        $claude = New-FakeClaudeRoot -Parent $TestDrive
+        Add-FakeClaudeLiveSession -ClaudeRoot $claude -ProcessId 1 -RawJson '{ not json' | Out-Null
+        $roots  = Get-VSCodeRoots -CodeRoot (Join-Path $TestDrive 'nocode') -ClaudeRoot $claude
+        $w = @()
+
+        $result = @(Get-ClaudeRunningSessions -Roots $roots -ProjectUri $uri -WarningVariable w -WarningAction SilentlyContinue)
+
+        $result.Count | Should Be 0
+        $w.Count      | Should BeGreaterThan 0
+    }
+
+    It "returns nothing when the sessions root is missing" {
+        $roots = Get-VSCodeRoots -CodeRoot (Join-Path $TestDrive 'nocode') -ClaudeRoot (Join-Path $TestDrive 'noclaude')
+        @(Get-ClaudeRunningSessions -Roots $roots -ProjectUri $uri).Count | Should Be 0
+    }
+}
