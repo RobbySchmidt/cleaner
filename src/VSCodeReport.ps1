@@ -22,7 +22,7 @@ function Format-ArtifactReport {
     )
 
     $lines = New-Object System.Collections.Generic.List[string]
-    $lines.Add("VS Code artifacts for project: $Project")
+    $lines.Add("Artifacts for project: $Project")
     $lines.Add("Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
     $lines.Add('')
 

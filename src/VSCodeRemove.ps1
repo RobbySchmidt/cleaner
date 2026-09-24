@@ -69,7 +69,7 @@ function Remove-VSCodeArtifacts {
 
     # A single failure (locked file, already gone) must not abort the rest.
     foreach ($t in $targets) {
-        if (-not $PSCmdlet.ShouldProcess($t.Path, 'Delete VS Code artifact')) { continue }
+        if (-not $PSCmdlet.ShouldProcess($t.Path, 'Delete artifact')) { continue }
         try {
             Remove-Item -LiteralPath $t.Path -Recurse -Force -ErrorAction Stop
             $t
