@@ -53,6 +53,7 @@ foreach ($dir in @($roots.CodeRoot, $roots.DotVscode, $roots.ClaudeRoot)) {
 Write-Host "Watching $($watchers.Count) root(s)."
 Write-Host "Now put '$Project' through a full lifecycle in VS Code:"
 Write-Host "  create it, open it, edit several files, let extensions activate,"
+Write-Host "  start a Claude Code session in it, have it edit a file, quit it,"
 Write-Host "  close the window, reopen it, then close VS Code entirely."
 Read-Host "Press Enter when done"
 

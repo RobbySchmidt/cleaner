@@ -53,7 +53,7 @@ breaks; you just do it twice.
 | `-Project <path>` | Required. The project folder. Must be a real drive path (`D:\...`). |
 | `-Delete` | Actually delete. Without it, report only. |
 | `-WhatIf` | Show what `-Delete` would remove, without removing it. Still writes the report. |
-| `-IncludeProbable` | Also delete window logs. **Read the warning below first.** |
+| `-IncludeProbable` | Also delete `probable` artifacts: window logs, and Claude Code project folders that only have `memory\` left (matched by the lossy folder name alone). **Read the warning below first.** |
 | `-ReportPath <file>` | Where to write the report. Defaults to a timestamped file in the current directory. |
 | `-CodeRoot <dir>` | Point at a different VS Code data folder. For testing, or a portable install. |
 | `-ClaudeRoot <dir>` | Point at a different Claude Code data folder (default `~\.claude`). For testing. |
@@ -67,8 +67,9 @@ The report marks every artifact one of two ways.
 **`certain`** — ownership came from VS Code's own metadata: a `folder` URI, a `resource`
 URI, or a matching workspace hash. These are deleted by `-Delete`.
 
-**`probable`** — a window log that merely *mentions* the project's path. Skipped unless you
-pass `-IncludeProbable`.
+**`probable`** — a window log that merely *mentions* the project's path, or a Claude Code
+project folder with only `memory\` left that matches by folder name alone (see below).
+Skipped unless you pass `-IncludeProbable`.
 
 **Why `-IncludeProbable` deserves care:** a window log belongs to *every project opened in
 that window*. Observed here — two different projects both resolved the same
@@ -77,9 +78,12 @@ to the other. VS Code also rotates old logs away by itself, so leaving them alon
 costs nothing.
 
 For Claude Code, `certain` means a transcript inside the folder records the project as its
-launch directory (`cwd`). `probable` is a `~\.claude\projects` folder with no transcript
-left — usually just `memory\` — that matches only by its folder name. That name is lossy:
-`A-B`, `A B` and `A\B` all become `...-A-B`, which is why it is never enough on its own.
+launch directory (`cwd`). Like the VS Code ones, these are deleted by `-Delete`.
+`probable` is a `~\.claude\projects` folder with no transcript left — usually just
+`memory\` — that matches only by its folder name. That name is lossy: `A-B`, `A B` and
+`A\B` all become `...-A-B`, which is why it is never enough on its own. So
+`-IncludeProbable` on `D:\Nuxt\A-B` can also delete the Claude Code memory of a
+*different* project, `D:\Nuxt\A B`, if that one's folder has no transcript left.
 
 ---
 
@@ -179,5 +183,5 @@ Import-Module Pester -RequiredVersion 3.4.0
 Invoke-Pester -Script .\tests
 ```
 
-86 tests. Run them after any change — several guardrails here look like defensive noise
+137 tests. Run them after any change — several guardrails here look like defensive noise
 and are actually load-bearing. `docs/superpowers/plans/` records why each one exists.

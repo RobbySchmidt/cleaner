@@ -35,7 +35,7 @@ suspect the layout changed.
 1. **Quit VS Code completely.** All windows, check the tray.
 
 2. **Use `$env:USERPROFILE\A` as the test folder** (that is, `C:\Users\<you>\A`).
-   It must not exist yet — if it's left over from a previous run, do step 13 first to
+   It must not exist yet — if it's left over from a previous run, do step 14 first to
    clear it out. Don't create it yet.
 
 3. **Start the watcher first:**
@@ -53,20 +53,25 @@ suspect the layout changed.
 
 6. **Add two or three files, type something, save.**
 
-7. **Close the VS Code window.**
+7. **Start a Claude Code session in that folder** (a second PowerShell window:
+   `cd "$env:USERPROFILE\A"; claude`), ask it to edit one of the files, let it make the
+   edit, then quit it (`/exit`).
 
-8. **Reopen the same folder.**
+8. **Close the VS Code window.**
 
-9. **Quit VS Code entirely.**
+9. **Reopen the same folder.**
 
-10. **Press Enter** in the PowerShell window.
+10. **Quit VS Code entirely.**
 
-11. **Check `Covered` is not zero** in the output. If it's zero, the `-Project` path didn't
+11. **Press Enter** in the PowerShell window.
+
+12. **Check `Covered` is not zero** in the output. If it's zero, the `-Project` path didn't
     match the folder you opened — fix it and redo from step 3.
 
-12. **Open the `.gaps.txt` file** it names.
+13. **Open the `.gaps.txt` file** it names.
 
-> The path after `-Project` must be exactly the folder you open in VS Code.
+> The path after `-Project` must be exactly the folder you open in VS Code and start
+> Claude Code in.
 
 ## Reading the gaps file
 
@@ -90,7 +95,7 @@ If that last row is empty, the tool is complete. Nothing to do.
 If it isn't — something under `User\` that mentions your project and isn't in
 `workspaceStorage` or `History` — that's a real gap and the tool needs a new scanner.
 
-13. **Clean up the throwaway** (VS Code still closed):
+14. **Clean up the throwaway** (VS Code still closed):
 
     ```powershell
     cd $env:CLEANER_HOME
@@ -202,8 +207,9 @@ What you're looking at:
 - **`History`** — copies of your files from every edit-and-save, VS Code's local undo history
 - **`workspaceStorage`** — per-workspace state: open tabs, search history, extension data
 - **`(certain)`** — VS Code's own metadata says this belongs to your project. Safe.
-- **`(probable)`** — only a *log* that mentions your project. Not deleted by default.
-  [More on those below.](#about-probable)
+- **`(probable)`** — only a *log* that mentions your project, or a Claude Code project
+  folder with just `memory\` left that matches by folder name alone. Not deleted by
+  default. [More on those below.](#about-probable)
 - **`claude:projects`** — Claude Code chat transcripts, subagent transcripts and project memory
 - **`claude:file-history`** — Claude Code's copies of files from before it edited them
 - **`claude:session-env`** — Claude Code per-session environment data
@@ -314,8 +320,14 @@ Find yours in that list. `file:///d%3A/Nuxt/foo` means `D:\Nuxt\foo`.
 
 # About `probable`
 
-Artifacts marked `(probable)` are **window logs** — matched only because your project's
-path appears somewhere in the log text. They are never deleted unless you ask:
+Artifacts marked `(probable)` are one of two things:
+
+- **VS Code window logs** — matched only because your project's path appears somewhere in
+  the log text.
+- **Claude Code project folders with only `memory\` left** (`claude:projects`) — no
+  transcript remains to say whose they are, so they match by folder name alone.
+
+They are never deleted unless you ask:
 
 ```powershell
 .\vscode-cleanup.ps1 -Project 'D:\Nuxt\foo' -Delete -IncludeProbable
@@ -325,6 +337,15 @@ path appears somewhere in the log text. They are never deleted unless you ask:
 testing, two different projects both resolved the same `window6` log — deleting it for one
 would have thrown away a log still relevant to the other. VS Code rotates old logs away by
 itself anyway, so leaving them costs you nothing.
+
+The Claude Code folder name is lossy: `D:\Nuxt\A-B` and `D:\Nuxt\A B` both become
+`D--Nuxt-A-B`. So `-IncludeProbable` on `...\A-B` can also delete the Claude Code memory
+of the different project `...\A B`. Check every `(probable)` Claude Code folder in the
+report is really yours first.
+
+`certain` Claude Code data — folders or transcripts whose recorded launch directory is
+your project — needs none of this: plain `-Delete` removes it, like the `certain` VS Code
+artifacts.
 
 ---
 
