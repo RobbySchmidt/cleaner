@@ -74,10 +74,13 @@ Most of it is expected. Group what you see:
 
 | Path contains | Meaning |
 |---|---|
-| `Service Worker`, `Local Storage`, `CachedData`, `GPUCache`, `Network`, `blob_storage` | Electron browser cache. Shared by all projects, never per-project deletable. **Ignore.** |
+| `Service Worker`, `Local Storage`, `Session Storage`, `Cache`, `CachedData`, `CachedConfigurations`, `GPUCache`, `Dawn…Cache`, `Network`, `blob_storage`, `Crashpad` | Electron browser cache. Shared by all projects, never per-project deletable. **Ignore.** |
 | `logs\` | Window logs. Already handled as `probable`. **Ignore.** |
 | `workspaceStorage\<digits>` (a long number, not a hex hash) | VS Code's per-session scratch. It deletes these itself on exit. **Ignore.** |
 | `User\globalStorage\storage.json` | One shared file for all 190 projects. **Never delete.** |
+| `User\globalStorage\agent-host-config.json` (and `agent-host.db`, `agent-host-storage.json`) | VS Code's agent/Copilot settings. Lists your project once, in a shared `workspaceTrust` list of every trusted folder. **Never delete.** |
+| `User\globalStorage\state.vscdb`, `vscode.git\askpass`, `*.tmp` | Shared global state and short-lived helper files. **Ignore.** |
+| `workspaceStorage\<hex hash>` of a *different* project | Another VS Code window was open during the test (e.g. this repo). Correctly not claimed. **Ignore.** |
 | **Anything else under `User\`** | **This is the interesting part.** |
 
 If that last row is empty, the tool is complete. Nothing to do.

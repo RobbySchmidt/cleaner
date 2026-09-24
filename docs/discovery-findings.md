@@ -190,6 +190,34 @@ This is the confidence tier doing exactly what it exists for, on real data. It i
 caution about `-IncludeProbable`: a window log is shared by every project that window
 touched, and nothing in the log structure separates them.
 
+## Finding 7 — second machine: `agent-host-config.json` is shared too
+
+**Classification: shared/global. Never delete per-project. No scanner should be added.**
+
+A live run was repeated on a second PC (2026-09-24), with a newer VS Code, against a
+fresh test folder `C:\Users\<you>\A`. The `-Project` path matched: 410 paths written,
+22 covered, 388 gaps.
+
+The 22 covered paths were the test folder's one `workspaceStorage` folder — including
+`chatSessions` and `chatEditingSessions`, which the resolver takes along because they sit
+inside it — and its two `History` entries.
+
+The gaps split the same way as Finding 4, with three additions under `User\`:
+
+- **`globalStorage\agent-host-config.json`** (plus `agent-host.db`, `agent-host-storage.json`),
+  new since the first run. It holds VS Code's agent/Copilot settings. It *does* name the
+  test folder, but only as one entry in a `workspaceTrust` list of 31 trusted folders,
+  among ~50 unrelated settings. Same shape as `storage.json` (Finding 2): one shared file
+  with a per-project line in it. Not edited, for the same reason.
+- **`workspaceStorage\<hash>` of a different project.** The `cleaner` repo itself was open
+  in another window during the run. Its `workspace.json` names that repo, so the resolver
+  was right not to claim it.
+- **`globalStorage\vscode.git\askpass\*`** and `Code\*.tmp` — short-lived helper files for
+  git credential prompts and VS Code's own writes. Not project-specific.
+
+Nothing project-specific was missed. The resolver's sources still cover everything that
+can be attributed to one project.
+
 ## Conclusion
 
 Both halves of Task 17 are done. The retrospective scan found no missed self-identifying
@@ -206,7 +234,8 @@ accounted for.
 
 ## Scope note
 
-Findings are from one project on one machine. The sibling result generalises — it is a
+Findings 1–6 are from one project on one machine; Finding 7 repeats the live run on a
+second machine with a newer VS Code and reaches the same conclusion. The sibling result generalises — it is a
 property of the matching logic, not of this data. The `globalStorage` result generalises
 too, since that file is structurally shared. Neither says anything about extensions not
 installed here.
