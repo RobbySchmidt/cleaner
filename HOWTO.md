@@ -45,7 +45,7 @@ suspect the layout changed.
    .\vscode-discover.ps1 -Project "$env:USERPROFILE\A"
    ```
 
-   Wait for `Watching 2 root(s).` Leave the window open. Don't press Enter yet.
+   Wait for `Watching 3 root(s).` Leave the window open. Don't press Enter yet.
 
 4. **Now create the folder:** `mkdir "$env:USERPROFILE\A"`
 
@@ -81,7 +81,9 @@ Most of it is expected. Group what you see:
 | `User\globalStorage\agent-host-config.json` (and `agent-host.db`, `agent-host-storage.json`) | VS Code's agent/Copilot settings. Lists your project once, in a shared `workspaceTrust` list of every trusted folder. **Never delete.** |
 | `User\globalStorage\state.vscdb`, `vscode.git\askpass`, `*.tmp` | Shared global state and short-lived helper files. **Ignore.** |
 | `workspaceStorage\<hex hash>` of a *different* project | Another VS Code window was open during the test (e.g. this repo). Correctly not claimed. **Ignore.** |
-| **Anything else under `User\`** | **This is the interesting part.** |
+| `.claude\backups`, `.claude\plugins`, `.claude\cache`, `.claude\ide`, `.claude\sessions`, `.claude\shell-snapshots`, `.claude\.last-cleanup` | Claude Code's own shared state. **Ignore.** |
+| `.claude\session-env\<id>` or `.claude\projects\<other>` of a *different* session | Another Claude Code session was running during the test (e.g. the one in this repo). **Ignore.** |
+| **Anything else under `User\` or `.claude\`** | **This is the interesting part.** |
 
 If that last row is empty, the tool is complete. Nothing to do.
 
@@ -107,11 +109,18 @@ whatever project you actually want.
 
 ---
 
-## Step 1 — Quit VS Code completely
+## Step 1 — Quit VS Code and Claude Code completely
 
 Not just the project's window. **All of VS Code.**
 
 Close every window, then check the system tray and Task Manager for a lingering `Code.exe`.
+
+Also quit any **Claude Code** session that was started in the project (or a folder inside
+it). A running session keeps writing its transcript.
+
+> **Heads-up:** this also deletes Claude Code's **memory** for that project
+> (`~\.claude\projects\<project>\memory\`). If there's something in it you want to keep,
+> copy it out first.
 
 > **Why this matters more than it sounds.** VS Code keeps a lock on `state.vscdb` for every
 > workspace it touched since it started, and only lets go when it exits. When this was
@@ -173,7 +182,7 @@ notepad .\vscode-artifacts-mastering-nuxt-3-20260922.txt
 It looks like this:
 
 ```
-VS Code artifacts for project: D:\Nuxt\mastering-nuxt-3
+Artifacts for project: D:\Nuxt\mastering-nuxt-3
 Generated: 2026-09-22 12:11:25
 
 [History] 7 item(s), 32652 bytes
@@ -195,8 +204,11 @@ What you're looking at:
 - **`(certain)`** — VS Code's own metadata says this belongs to your project. Safe.
 - **`(probable)`** — only a *log* that mentions your project. Not deleted by default.
   [More on those below.](#about-probable)
+- **`claude:projects`** — Claude Code chat transcripts, subagent transcripts and project memory
+- **`claude:file-history`** — Claude Code's copies of files from before it edited them
+- **`claude:session-env`** — Claude Code per-session environment data
 
-Glance down the paths. Every one should sit under `AppData\Roaming\Code\User\`. If
+Glance down the paths. Every one should sit under `AppData\Roaming\Code\User\` or `.claude\`. If
 something looks wrong, stop and ask — don't continue.
 
 ---

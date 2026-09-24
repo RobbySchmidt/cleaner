@@ -3,9 +3,10 @@
 > **First time, or just want the steps?** Read **[HOWTO.md](HOWTO.md)** instead — it walks
 > through cleaning one project from start to finish. This file is the reference.
 
-Finds everything VS Code wrote **outside** a project folder on that project's behalf —
-local file history, workspace storage, unsaved-buffer backups, window logs — so a project
-can be deleted properly instead of leaving state behind forever.
+Finds everything VS Code **and Claude Code** wrote **outside** a project folder on that
+project's behalf — local file history, workspace storage, unsaved-buffer backups, window
+logs, Claude Code chat transcripts, subagent transcripts, project memory and pre-edit file
+copies — so a project can be deleted properly instead of leaving state behind forever.
 
 It works retroactively. A project you deleted months ago still has its VS Code state, and
 this finds it.
@@ -55,6 +56,7 @@ breaks; you just do it twice.
 | `-IncludeProbable` | Also delete window logs. **Read the warning below first.** |
 | `-ReportPath <file>` | Where to write the report. Defaults to a timestamped file in the current directory. |
 | `-CodeRoot <dir>` | Point at a different VS Code data folder. For testing, or a portable install. |
+| `-ClaudeRoot <dir>` | Point at a different Claude Code data folder (default `~\.claude`). For testing. |
 
 ---
 
@@ -74,14 +76,21 @@ that window*. Observed here — two different projects both resolved the same
 to the other. VS Code also rotates old logs away by itself, so leaving them alone usually
 costs nothing.
 
+For Claude Code, `certain` means a transcript inside the folder records the project as its
+launch directory (`cwd`). `probable` is a `~\.claude\projects` folder with no transcript
+left — usually just `memory\` — that matches only by its folder name. That name is lossy:
+`A-B`, `A B` and `A\B` all become `...-A-B`, which is why it is never enough on its own.
+
 ---
 
 ## What it refuses to do
 
 Each of these exists because it was a real hazard, not a hypothetical:
 
-- **Won't delete outside VS Code's artifact folders.** Only `workspaceStorage`, `History`,
-  `Backups` and `logs`. Not `settings.json`, not `snippets`, not your extensions.
+- **Won't delete outside the artifact folders.** Only VS Code's `workspaceStorage`,
+  `History`, `Backups` and `logs`, and Claude Code's `projects`, `file-history` and
+  `session-env`. Not `settings.json`, not `snippets`, not your extensions, not
+  `~\.claude.json`, not your Claude login.
 - **Won't accept a drive root.** `D:\`, `D:\.`, `D:\..`, `D:\\` are all refused. That path
   would otherwise match every artifact on the drive.
 - **Won't delete a tree containing a junction or symlink**, and refuses if it cannot fully
@@ -106,6 +115,13 @@ against real data. Artifacts might be missed. Check the report before deleting.
 **"VS Code is running"**
 See above. Quit it completely.
 
+**"Claude Code is running in this project"**
+A Claude Code session started in that folder (or below it) is still open. Quit it first;
+it keeps writing its transcript.
+
+**"is a parent of N separate Claude Code projects"**
+Same as the VS Code warning, for Claude Code transcripts.
+
 ---
 
 ## What it does *not* touch
@@ -118,6 +134,12 @@ See above. Quit it completely.
 - **Unattributed `workspaceStorage` folders** (timestamp-named, no `workspace.json`).
   These are VS Code's per-session scratch and it deletes them itself on exit. Verified:
   6 of them vanished the moment VS Code was quit.
+- **`~\.claude.json`** — one shared file with your Claude Code login, settings and one
+  entry per project. Like `storage.json`, never edited per project.
+- **Claude Code's shared folders** — `shell-snapshots`, `sessions`, `backups`, `plugins`,
+  `skills`, `cache`, `ide`, `telemetry`.
+- **`session-env` folders that belong to no transcript.** Most of them, on this machine.
+  They can't be tied to a project.
 
 ---
 
@@ -133,7 +155,7 @@ You'd only re-run it after a major VS Code update, if you suspect the layout cha
 .\vscode-discover.ps1 -Project "$env:USERPROFILE\A"
 ```
 
-Start it **first**, wait for `Watching 2 root(s)`, *then* create and open that exact folder
+Start it **first**, wait for `Watching 3 root(s)`, *then* create and open that exact folder
 in VS Code, edit something, close, reopen, quit VS Code, press Enter. If the `-Project`
 path and the folder you open disagree, it now tells you instead of reporting everything as
 a gap.
