@@ -118,7 +118,9 @@ no `cwd` → `$null`.
 **Ownerless transcripts exist.** One of 25 transcripts on this machine is a single line
 `{"type":"teleported-from","remoteSessionId":...}` with no `cwd`, no `<sid>\` folder, no
 `file-history`. Counting it as foreign would make rule 3 strand the stub, `memory\` and
-the folder for that project, so it is neither owned nor foreign.
+the folder for that project, so it is neither owned nor foreign. An unreadable transcript
+is **not** ownerless: it may be another project's, and a foreign transcript read as
+ownerless would let a folder shared by look-alike projects be taken whole.
 
 Checked against all 17 folders here: for every transcript that has a `cwd`, the first
 `cwd` encodes to exactly its folder's name.
@@ -166,8 +168,11 @@ watched folder and will not appear.
 ## Error handling
 
 - Missing `~\.claude` or any sub-root → that scanner returns nothing, no error.
-- Unparseable transcript line → skip the line; no owner found → treat as unowned (rule 4
-  or 5). Never guess an owner.
+- Unparseable transcript line → skip the line. A transcript that cannot be opened, whose
+  `"cwd"` lines all fail to parse, or whose `cwd` is empty → owner `'<unknown>'`, treated
+  as **foreign**: it blocks rules 2 and 4, so its folder can only be split per rule 3.
+  Only a transcript read to the end with no `"cwd"` at all is ownerless. Never guess an
+  owner.
 - Unparseable `sessions\*.json` → skip with a warning; the running check is advisory.
 
 ## Testing (Pester 3.4, fixtures under `$TestDrive`)
