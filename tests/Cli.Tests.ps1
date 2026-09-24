@@ -129,6 +129,23 @@ Describe "vscode-cleanup.ps1 (Claude Code)" {
         @($w | Where-Object { $_ -match 'Claude Code is running' }).Count | Should Be 1
     }
 
+    It "deletes only the project's own transcript from a folder shared with a look-alike project" {
+        $code   = New-FakeCodeRoot   -Parent $TestDrive
+        $claude = New-FakeClaudeRoot -Parent $TestDrive
+        $mine   = Add-FakeClaudeTranscript -ClaudeRoot $claude -DirName 'd--Nuxt-A-B' -SessionId 'mine'   -Cwd 'D:\Nuxt\A-B' -WithSessionFolder
+        $theirs = Add-FakeClaudeTranscript -ClaudeRoot $claude -DirName 'd--Nuxt-A-B' -SessionId 'theirs' -Cwd 'D:\Nuxt\A B'
+        $dir    = Add-FakeClaudeMemory -ClaudeRoot $claude -DirName 'd--Nuxt-A-B'
+        $report = Join-Path $TestDrive 'c6.txt'
+
+        & $script:Cli -Project 'D:\Nuxt\A-B' -CodeRoot $code -ClaudeRoot $claude -ReportPath $report -Delete | Out-Null
+
+        Test-Path $mine                       | Should Be $false
+        Test-Path (Join-Path $dir 'mine')     | Should Be $false
+        Test-Path $theirs                     | Should Be $true
+        Test-Path (Join-Path $dir 'memory')   | Should Be $true
+        Test-Path $dir                        | Should Be $true
+    }
+
     It "works when there is no ~\.claude at all" {
         $code   = New-FakeCodeRoot -Parent $TestDrive
         $ws     = Add-FakeWorkspace -CodeRoot $code -Hash 'ws1' -FolderUri 'file:///d%3A/Nuxt/foo'

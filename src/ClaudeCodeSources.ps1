@@ -9,10 +9,22 @@
     Reads line by line and stops at the first hit -- transcripts reach ~1 MB. Only lines
     that contain "cwd" are parsed, and an unparseable line is skipped, not fatal.
 
+    Returns:
+      the cwd      -- from the first line that parses and has a non-empty cwd
+      $null        -- the file was read to the end and no line mentions "cwd" at all
+                      (ownerless, e.g. a one-line "teleported-from" stub)
+      '<unknown>'  -- everything else: the file could not be opened or read, or lines
+                      mention "cwd" but none parses to a non-empty one
+
+    The dangerous direction is a FOREIGN transcript read as ownerless: in a folder shared
+    by look-alike projects ('A-B' / 'A B') that makes the folder `certain` and takes the
+    other project's transcript and memory\ with it. So anything short of "no cwd
+    anywhere" is '<unknown>', which Get-ClaudeTranscriptClass treats as foreign. Never
+    guess an owner.
+
     Opened with FileShare ReadWrite|Delete because a running Claude Code session holds its
-    transcript open for writing. A plain StreamReader(path) would fail on exactly the
-    transcript the user is most likely to be cleaning, and the failure would read as
-    "ownerless" -- which can let a folder through as `probable` instead of `certain`.
+    transcript open for writing; a plain StreamReader(path) would fail on exactly the
+    transcript the user is most likely to be cleaning.
 #>
 function Get-ClaudeTranscriptOwner {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -24,14 +36,17 @@ function Get-ClaudeTranscriptOwner {
         $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, $share)
         $reader = [System.IO.StreamReader]::new($stream)
 
+        $sawCwd = $false
         while ($null -ne ($line = $reader.ReadLine())) {
-            if ($line.IndexOf('"cwd"') -lt 0) { continue }
+            if ($line.IndexOf('"cwd"', [System.StringComparison]::Ordinal) -lt 0) { continue }
+            $sawCwd = $true
             try { $obj = $line | ConvertFrom-Json -ErrorAction Stop } catch { continue }
             if ($obj.cwd) { return [string]$obj.cwd }
         }
+        if ($sawCwd) { return '<unknown>' }
         return $null
     } catch {
-        return $null
+        return '<unknown>'
     } finally {
         if ($reader) { $reader.Dispose() } elseif ($stream) { $stream.Dispose() }
     }
@@ -50,6 +65,9 @@ function ConvertTo-ClaudeProjectDirName {
 # foreign   -- it has a launch directory, and it is somewhere else
 # ownerless -- no cwd at all (e.g. a one-line "teleported-from" stub); counts for nobody
 #
+# '<unknown>' (unreadable file, or a cwd that did not parse) is foreign: it may well be
+# another project's transcript, and ownerless would let its folder be taken whole.
+#
 # A cwd that ConvertTo-VSCodeUri rejects (UNC, WSL '/home/...', relative) is a real owner
 # that cannot be under a drive-path project, so it is foreign -- never ownerless, because
 # ownerless would let its folder be taken whole.
@@ -60,6 +78,8 @@ function Get-ClaudeTranscriptClass {
     )
 
     if (-not $Owner) { return 'ownerless' }
+    # Explicit, although ConvertTo-VSCodeUri would reject '<unknown>' and land on foreign too.
+    if ($Owner -eq '<unknown>') { return 'foreign' }
     try { $ownerUri = ConvertTo-VSCodeUri -Path $Owner } catch { return 'foreign' }
     if (Test-UriUnderProject -Uri $ownerUri -ProjectUri $ProjectUri) { 'owned' } else { 'foreign' }
 }
@@ -95,7 +115,7 @@ function Get-ClaudeProjectArtifacts {
         $owned   = @()
         $foreign = 0
 
-        foreach ($t in @(Get-ChildItem -LiteralPath $dir.FullName -Filter '*.jsonl' -File)) {
+        foreach ($t in @(Get-ChildItem -LiteralPath $dir.FullName -Filter '*.jsonl' -File -Force)) {
             $owner = Get-ClaudeTranscriptOwner -Path $t.FullName
             switch (Get-ClaudeTranscriptClass -Owner $owner -ProjectUri $ProjectUri) {
                 'owned'   { $owned += [pscustomobject]@{ File = $t.FullName; SessionId = $t.BaseName; Owner = $owner } }
@@ -206,11 +226,16 @@ function Get-ClaudeRunningSessions {
         }
 
         if (-not $j.cwd -or -not $j.pid) { return }
+        $procId = 0
+        if (-not [int]::TryParse([string]$j.pid, [ref]$procId)) {
+            Write-Warning "Skipping ${file}: pid is not a number"
+            return
+        }
         if ((Get-ClaudeTranscriptClass -Owner $j.cwd -ProjectUri $ProjectUri) -ne 'owned') { return }
-        if (-not (Get-Process -Id ([int]$j.pid) -ErrorAction SilentlyContinue)) { return }
+        if (-not (Get-Process -Id $procId -ErrorAction SilentlyContinue)) { return }
 
         [pscustomobject]@{
-            ProcessId = [int]$j.pid
+            ProcessId = $procId
             SessionId = [string]$j.sessionId
             Cwd       = [string]$j.cwd
         }

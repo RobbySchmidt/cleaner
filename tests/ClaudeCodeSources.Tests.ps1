@@ -40,8 +40,27 @@ Describe "Get-ClaudeTranscriptOwner" {
         Get-ClaudeTranscriptOwner -Path $file | Should Be $null
     }
 
-    It "returns null for a missing file" {
-        Get-ClaudeTranscriptOwner -Path (Join-Path $TestDrive 'nope.jsonl') | Should Be $null
+    It "returns '<unknown>' for a file it cannot open" {
+        Get-ClaudeTranscriptOwner -Path (Join-Path $TestDrive 'nope.jsonl') | Should Be '<unknown>'
+    }
+
+    It "returns '<unknown>' when the only cwd lines do not parse" {
+        $claude = New-FakeClaudeRoot -Parent $TestDrive
+        $file = Add-FakeClaudeTranscript -ClaudeRoot $claude -DirName 'd--Nuxt-foo' -SessionId 's1' -RawLines @(
+            '{"type":"summary"}',
+            '{"cwd": broken'
+        )
+
+        Get-ClaudeTranscriptOwner -Path $file | Should Be '<unknown>'
+    }
+
+    It "returns '<unknown>' when the cwd is empty" {
+        $claude = New-FakeClaudeRoot -Parent $TestDrive
+        $file = Add-FakeClaudeTranscript -ClaudeRoot $claude -DirName 'd--Nuxt-foo' -SessionId 's1' -RawLines @(
+            '{"type":"user","cwd":""}'
+        )
+
+        Get-ClaudeTranscriptOwner -Path $file | Should Be '<unknown>'
     }
 
     It "reads a transcript another process holds open for writing" {
@@ -133,6 +152,62 @@ Describe "Get-ClaudeProjectArtifacts" {
         ($paths -contains (Join-Path $dir 'memory')) | Should Be $false
         @($result | Where-Object { $_.Confidence -ne 'certain' }).Count | Should Be 0
         (@($result | ForEach-Object { $_.SessionIds }) -join ',') | Should Be 'mine'
+    }
+
+    It "splits a shared folder when the other transcript cannot be opened" {
+        $claude  = New-FakeClaudeRoot -Parent $TestDrive
+        $mine    = Add-FakeClaudeTranscript -ClaudeRoot $claude -DirName 'd--Nuxt-A-B' -SessionId 'mine'   -Cwd 'D:\Nuxt\A-B' -WithSessionFolder
+        $theirs  = Add-FakeClaudeTranscript -ClaudeRoot $claude -DirName 'd--Nuxt-A-B' -SessionId 'theirs' -Cwd 'D:\Nuxt\A B'
+        $dir     = Add-FakeClaudeMemory -ClaudeRoot $claude -DirName 'd--Nuxt-A-B'
+        $roots   = Get-VSCodeRoots -CodeRoot (Join-Path $TestDrive 'nocode') -ClaudeRoot $claude
+        $abUri   = ConvertTo-VSCodeUri -Path 'D:\Nuxt\A-B'
+        $abName  = ConvertTo-ClaudeProjectDirName -Path 'D:\Nuxt\A-B'
+
+        $lock = [System.IO.File]::Open($theirs, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::None)
+        try {
+            $result = @(Get-ClaudeProjectArtifacts -Roots $roots -ProjectUri $abUri -ProjectDirName $abName)
+        } finally {
+            $lock.Dispose()
+        }
+        $paths = @($result | ForEach-Object { $_.Path })
+
+        $result.Count | Should Be 2
+        ($paths -contains $mine)                     | Should Be $true
+        ($paths -contains (Join-Path $dir 'mine'))   | Should Be $true
+        ($paths -contains $dir)                      | Should Be $false
+        ($paths -contains (Join-Path $dir 'memory')) | Should Be $false
+    }
+
+    It "splits a shared folder when the other transcript's cwd lines do not parse" {
+        $claude  = New-FakeClaudeRoot -Parent $TestDrive
+        $mine    = Add-FakeClaudeTranscript -ClaudeRoot $claude -DirName 'd--Nuxt-A-B' -SessionId 'mine' -Cwd 'D:\Nuxt\A-B' -WithSessionFolder
+        Add-FakeClaudeTranscript -ClaudeRoot $claude -DirName 'd--Nuxt-A-B' -SessionId 'theirs' -RawLines @(
+            '{"type":"user","cwd":"D:\\Nuxt\\A B" broken'
+        ) | Out-Null
+        $dir     = Add-FakeClaudeMemory -ClaudeRoot $claude -DirName 'd--Nuxt-A-B'
+        $roots   = Get-VSCodeRoots -CodeRoot (Join-Path $TestDrive 'nocode') -ClaudeRoot $claude
+        $abUri   = ConvertTo-VSCodeUri -Path 'D:\Nuxt\A-B'
+        $abName  = ConvertTo-ClaudeProjectDirName -Path 'D:\Nuxt\A-B'
+
+        $result = @(Get-ClaudeProjectArtifacts -Roots $roots -ProjectUri $abUri -ProjectDirName $abName)
+        $paths  = @($result | ForEach-Object { $_.Path })
+
+        $result.Count | Should Be 2
+        ($paths -contains $mine)                     | Should Be $true
+        ($paths -contains (Join-Path $dir 'mine'))   | Should Be $true
+        ($paths -contains $dir)                      | Should Be $false
+        ($paths -contains (Join-Path $dir 'memory')) | Should Be $false
+    }
+
+    It "returns nothing for a name-matching folder that holds only another project's transcript" {
+        $claude = New-FakeClaudeRoot -Parent $TestDrive
+        Add-FakeClaudeTranscript -ClaudeRoot $claude -DirName 'd--Nuxt-A-B' -SessionId 'theirs' -Cwd 'D:\Nuxt\A B' | Out-Null
+        Add-FakeClaudeMemory -ClaudeRoot $claude -DirName 'd--Nuxt-A-B' | Out-Null
+        $roots  = Get-VSCodeRoots -CodeRoot (Join-Path $TestDrive 'nocode') -ClaudeRoot $claude
+        $abUri  = ConvertTo-VSCodeUri -Path 'D:\Nuxt\A-B'
+        $abName = ConvertTo-ClaudeProjectDirName -Path 'D:\Nuxt\A-B'
+
+        @(Get-ClaudeProjectArtifacts -Roots $roots -ProjectUri $abUri -ProjectDirName $abName).Count | Should Be 0
     }
 
     It "treats an ownerless stub as neutral, not as another project" {
@@ -278,6 +353,18 @@ Describe "Get-ClaudeRunningSessions" {
 
         $result.Count | Should Be 0
         $w.Count      | Should BeGreaterThan 0
+    }
+
+    It "warns and skips a session file whose pid is not a number" {
+        $claude = New-FakeClaudeRoot -Parent $TestDrive
+        Add-FakeClaudeLiveSession -ClaudeRoot $claude -ProcessId 2 -RawJson '{"pid":"abc","cwd":"D:\\Nuxt\\foo"}' | Out-Null
+        $roots  = Get-VSCodeRoots -CodeRoot (Join-Path $TestDrive 'nocode') -ClaudeRoot $claude
+        $w = @()
+
+        $result = @(Get-ClaudeRunningSessions -Roots $roots -ProjectUri $uri -WarningVariable w -WarningAction SilentlyContinue)
+
+        $result.Count | Should Be 0
+        @($w | Where-Object { $_ -match 'pid is not a number' }).Count | Should Be 1
     }
 
     It "returns nothing when the sessions root is missing" {

@@ -60,7 +60,7 @@ function Remove-VSCodeArtifacts {
     # everything the tool could be tricked into doing. No privilege boundary is crossed.
     foreach ($t in $targets) {
         if (-not (Test-PathUnderArtifactRoots -Path $t.Path -Roots $Roots)) {
-            throw "Refusing to delete path outside the VS Code roots: $($t.Path)"
+            throw "Refusing to delete path outside the artifact roots: $($t.Path)"
         }
         if (Test-PathHasReparsePoint -Path $t.Path) {
             throw "Refusing to delete a tree containing a junction or symlink: $($t.Path)"
