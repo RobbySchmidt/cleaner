@@ -147,3 +147,39 @@ function Get-ClaudeProjectArtifacts {
         }
     }
 }
+
+# Session IDs come from transcript file names, which anything can create. Only a plain
+# ID is joined onto a root: '..' would otherwise resolve to ~\.claude itself, which the
+# allowlist refuses -- and that refusal aborts the whole deletion, not just this item.
+function Get-ClaudeSessionArtifacts {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]$Roots,
+        [AllowEmptyCollection()][string[]]$SessionIds = @()
+    )
+
+    $kinds = @(
+        @{ Root = $Roots.ClaudeFileHistory; Source = 'claude:file-history' },
+        @{ Root = $Roots.ClaudeSessionEnv;  Source = 'claude:session-env'  }
+    )
+
+    foreach ($kind in $kinds) {
+        if (-not (Test-Path -LiteralPath $kind.Root)) { continue }
+
+        foreach ($id in ($SessionIds | Sort-Object -Unique)) {
+            if ($id -notmatch '^[A-Za-z0-9][A-Za-z0-9-]*$') { continue }
+
+            $dir = Join-Path $kind.Root $id
+            if (Test-Path -LiteralPath $dir -PathType Container) {
+                [pscustomobject]@{
+                    Path       = $dir
+                    Source     = $kind.Source
+                    Confidence = 'certain'
+                    Hash       = $id
+                    SessionIds = @()
+                    Owners     = @()
+                }
+            }
+        }
+    }
+}

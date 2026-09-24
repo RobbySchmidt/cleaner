@@ -196,3 +196,41 @@ Describe "Get-ClaudeProjectArtifacts" {
         @(Get-ClaudeProjectArtifacts -Roots $roots -ProjectUri $uri -ProjectDirName $name).Count | Should Be 0
     }
 }
+
+Describe "Get-ClaudeSessionArtifacts" {
+    It "returns file-history and session-env folders for the given sessions only" {
+        $claude = New-FakeClaudeRoot -Parent $TestDrive
+        $fh     = Add-FakeClaudeSessionDir -ClaudeRoot $claude -Kind 'file-history' -SessionId 's1'
+        $se     = Add-FakeClaudeSessionDir -ClaudeRoot $claude -Kind 'session-env'  -SessionId 's1'
+        Add-FakeClaudeSessionDir -ClaudeRoot $claude -Kind 'file-history' -SessionId 'orphan' | Out-Null
+        Add-FakeClaudeSessionDir -ClaudeRoot $claude -Kind 'session-env'  -SessionId 'orphan' | Out-Null
+        $roots  = Get-VSCodeRoots -CodeRoot (Join-Path $TestDrive 'nocode') -ClaudeRoot $claude
+
+        $result = @(Get-ClaudeSessionArtifacts -Roots $roots -SessionIds @('s1'))
+
+        $result.Count | Should Be 2
+        (@($result | Where-Object { $_.Source -eq 'claude:file-history' }))[0].Path | Should Be $fh
+        (@($result | Where-Object { $_.Source -eq 'claude:session-env' }))[0].Path  | Should Be $se
+        @($result | Where-Object { $_.Confidence -ne 'certain' }).Count | Should Be 0
+    }
+
+    It "returns nothing for an empty session list" {
+        $claude = New-FakeClaudeRoot -Parent $TestDrive
+        Add-FakeClaudeSessionDir -ClaudeRoot $claude -Kind 'file-history' -SessionId 's1' | Out-Null
+        $roots  = Get-VSCodeRoots -CodeRoot (Join-Path $TestDrive 'nocode') -ClaudeRoot $claude
+
+        @(Get-ClaudeSessionArtifacts -Roots $roots -SessionIds @()).Count | Should Be 0
+    }
+
+    It "ignores a session ID that could escape its root" {
+        $claude = New-FakeClaudeRoot -Parent $TestDrive
+        $roots  = Get-VSCodeRoots -CodeRoot (Join-Path $TestDrive 'nocode') -ClaudeRoot $claude
+
+        @(Get-ClaudeSessionArtifacts -Roots $roots -SessionIds @('..', '.', 'a\..\..', '')).Count | Should Be 0
+    }
+
+    It "returns nothing when the roots are missing" {
+        $roots = Get-VSCodeRoots -CodeRoot (Join-Path $TestDrive 'nocode') -ClaudeRoot (Join-Path $TestDrive 'noclaude')
+        @(Get-ClaudeSessionArtifacts -Roots $roots -SessionIds @('s1')).Count | Should Be 0
+    }
+}
