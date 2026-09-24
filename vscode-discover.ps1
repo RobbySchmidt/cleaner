@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    One-off sanity check: records every path VS Code writes under its own roots during a
+    One-off sanity check: records every path VS Code and Claude Code write under their own roots during a
     work session, then diffs that against what the resolver would have found.
 
 .EXAMPLE
@@ -17,6 +17,8 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\src\VSCodeUri.ps1"
 . "$PSScriptRoot\src\VSCodeRoots.ps1"
 . "$PSScriptRoot\src\VSCodeSources.ps1"
+. "$PSScriptRoot\src\ClaudeCodeSources.ps1"
+. "$PSScriptRoot\src\ProjectArtifacts.ps1"
 . "$PSScriptRoot\src\VSCodeReport.ps1"
 . "$PSScriptRoot\src\VSCodeDiff.ps1"
 
@@ -28,7 +30,7 @@ $roots    = Get-VSCodeRoots
 $written  = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
 $watchers = @()
 
-foreach ($dir in @($roots.CodeRoot, $roots.DotVscode)) {
+foreach ($dir in @($roots.CodeRoot, $roots.DotVscode, $roots.ClaudeRoot)) {
     if (-not (Test-Path $dir)) { continue }
 
     $w = New-Object System.IO.FileSystemWatcher $dir
@@ -61,7 +63,7 @@ foreach ($w in $watchers) { $w.Dispose() }
 $written | Sort-Object | Out-File -FilePath $LogPath -Encoding utf8
 Write-Host "Recorded $($written.Count) written path(s) -> $LogPath"
 
-$artifacts = @(Get-VSCodeProjectArtifacts -Project $Project -Roots $roots)
+$artifacts = @(Get-ProjectArtifacts -Project $Project -Roots $roots)
 $diff      = Compare-DiscoveryToResolver -WrittenPaths @($written) -Artifacts $artifacts
 
 $gapLog = [System.IO.Path]::ChangeExtension($LogPath, '.gaps.txt')
