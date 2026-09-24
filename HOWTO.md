@@ -74,7 +74,7 @@ Most of it is expected. Group what you see:
 
 | Path contains | Meaning |
 |---|---|
-| `Service Worker`, `Local Storage`, `Session Storage`, `Cache`, `CachedData`, `CachedConfigurations`, `GPUCache`, `Dawn…Cache`, `Network`, `blob_storage`, `Crashpad` | Electron browser cache. Shared by all projects, never per-project deletable. **Ignore.** |
+| `Service Worker`, `Local Storage`, `Session Storage`, `WebStorage`, `Cache`, `CachedData`, `CachedConfigurations`, `GPUCache`, `Dawn…Cache`, `Network`, `blob_storage`, `Crashpad` | Electron browser cache. Shared by all projects, never per-project deletable. **Ignore.** |
 | `logs\` | Window logs. Already handled as `probable`. **Ignore.** |
 | `workspaceStorage\<digits>` (a long number, not a hex hash) | VS Code's per-session scratch. It deletes these itself on exit. **Ignore.** |
 | `User\globalStorage\storage.json` | One shared file for all 190 projects. **Never delete.** |

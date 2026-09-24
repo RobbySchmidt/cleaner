@@ -218,6 +218,12 @@ The gaps split the same way as Finding 4, with three additions under `User\`:
 Nothing project-specific was missed. The resolver's sources still cover everything that
 can be attributed to one project.
 
+A second full cycle on the same PC — clean up, delete the folder, recreate it, run again —
+gave the same picture: 408 written, 21 covered, 387 gaps, and no new path under `User\`.
+The first cycle's `workspaceStorage` folder was gone, confirming the cleanup had removed
+it. VS Code gave the recreated folder a new `workspaceStorage` hash. The only new name in
+the gaps was `WebStorage\QuotaManager`, which is Electron's storage bookkeeping, i.e. shared cache.
+
 ## Conclusion
 
 Both halves of Task 17 are done. The retrospective scan found no missed self-identifying
