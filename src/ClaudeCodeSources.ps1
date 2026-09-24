@@ -45,3 +45,105 @@ function ConvertTo-ClaudeProjectDirName {
 
     ([System.IO.Path]::GetFullPath($Path).TrimEnd('\')) -replace '[^A-Za-z0-9]', '-'
 }
+
+# owned     -- the transcript's launch directory is the project or inside it
+# foreign   -- it has a launch directory, and it is somewhere else
+# ownerless -- no cwd at all (e.g. a one-line "teleported-from" stub); counts for nobody
+#
+# A cwd that ConvertTo-VSCodeUri rejects (UNC, WSL '/home/...', relative) is a real owner
+# that cannot be under a drive-path project, so it is foreign -- never ownerless, because
+# ownerless would let its folder be taken whole.
+function Get-ClaudeTranscriptClass {
+    param(
+        [AllowNull()][AllowEmptyString()][string]$Owner,
+        [Parameter(Mandatory = $true)][string]$ProjectUri
+    )
+
+    if (-not $Owner) { return 'ownerless' }
+    try { $ownerUri = ConvertTo-VSCodeUri -Path $Owner } catch { return 'foreign' }
+    if (Test-UriUnderProject -Uri $ownerUri -ProjectUri $ProjectUri) { 'owned' } else { 'foreign' }
+}
+
+<#
+.SYNOPSIS
+    ~\.claude\projects folders (or parts of them) that belong to a project.
+
+.DESCRIPTION
+    The folder name is lossy ('A-B', 'A B' and 'A\B' share one), so ownership comes from
+    each transcript's recorded cwd, via the same Test-UriUnderProject boundary rule the
+    VS Code scanners use. Per folder:
+
+      owned, no foreign     -> whole folder, certain (memory\, <sid>\ and stubs included)
+      owned and foreign     -> each owned <sid>.jsonl and its <sid>\ folder, certain;
+                               memory\, stubs and the folder stay -- they are shared
+      neither               -> whole folder, probable, only if its name equals the
+                               project's encoded name (memory-only folders)
+      only foreign          -> nothing
+#>
+function Get-ClaudeProjectArtifacts {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]$Roots,
+        [Parameter(Mandatory = $true)][string]$ProjectUri,
+        [Parameter(Mandatory = $true)][string]$ProjectDirName
+    )
+
+    if (-not (Test-Path -LiteralPath $Roots.ClaudeProjects)) { return @() }
+
+    Get-ChildItem -LiteralPath $Roots.ClaudeProjects -Directory | ForEach-Object {
+        $dir     = $_
+        $owned   = @()
+        $foreign = 0
+
+        foreach ($t in @(Get-ChildItem -LiteralPath $dir.FullName -Filter '*.jsonl' -File)) {
+            $owner = Get-ClaudeTranscriptOwner -Path $t.FullName
+            switch (Get-ClaudeTranscriptClass -Owner $owner -ProjectUri $ProjectUri) {
+                'owned'   { $owned += [pscustomobject]@{ File = $t.FullName; SessionId = $t.BaseName; Owner = $owner } }
+                'foreign' { $foreign++ }
+            }
+        }
+
+        if ($owned.Count -gt 0 -and $foreign -eq 0) {
+            [pscustomobject]@{
+                Path       = $dir.FullName
+                Source     = 'claude:projects'
+                Confidence = 'certain'
+                Hash       = $dir.Name
+                SessionIds = @($owned | ForEach-Object { $_.SessionId })
+                Owners     = @($owned | ForEach-Object { $_.Owner } | Sort-Object -Unique)
+            }
+        } elseif ($owned.Count -gt 0) {
+            foreach ($o in $owned) {
+                [pscustomobject]@{
+                    Path       = $o.File
+                    Source     = 'claude:projects'
+                    Confidence = 'certain'
+                    Hash       = $o.SessionId
+                    SessionIds = @($o.SessionId)
+                    Owners     = @($o.Owner)
+                }
+                $sub = Join-Path $dir.FullName $o.SessionId
+                if (Test-Path -LiteralPath $sub -PathType Container) {
+                    # The session ID is carried once, on the transcript artifact above.
+                    [pscustomobject]@{
+                        Path       = $sub
+                        Source     = 'claude:projects'
+                        Confidence = 'certain'
+                        Hash       = $o.SessionId
+                        SessionIds = @()
+                        Owners     = @($o.Owner)
+                    }
+                }
+            }
+        } elseif ($foreign -eq 0 -and $dir.Name -ieq $ProjectDirName) {
+            [pscustomobject]@{
+                Path       = $dir.FullName
+                Source     = 'claude:projects'
+                Confidence = 'probable'
+                Hash       = $dir.Name
+                SessionIds = @()
+                Owners     = @()
+            }
+        }
+    }
+}
